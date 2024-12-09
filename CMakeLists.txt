@@ -86,6 +86,6 @@ add_custom_command(
 	TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_CURRENT_SOURCE_DIR}/../.clang-format
-    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Copying .clang-format to the build directory."
 )
