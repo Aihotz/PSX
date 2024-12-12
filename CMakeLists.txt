@@ -75,17 +75,21 @@ endif()
 add_subdirectory(src EXCLUDE_FROM_ALL) # This is used to add all source files other than main.cpp
 target_link_libraries(${PROJECT_NAME} PRIVATE ${DEPENDENCY_LIBRARIES})
 
-add_custom_command(
-	TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_directory
-	${CMAKE_CURRENT_SOURCE_DIR}/../data
-	${CMAKE_CURRENT_BINARY_DIR}/data
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
+	add_custom_command(
+		TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+		${CMAKE_CURRENT_SOURCE_DIR}/data
+		${CMAKE_CURRENT_BINARY_DIR}/data
+	)
+endif()
 
-add_custom_command(
-	TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_CURRENT_SOURCE_DIR}/../.clang-format
-    ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "Copying .clang-format to the build directory."
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.clang-format")
+	add_custom_command(
+		TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		${CMAKE_CURRENT_SOURCE_DIR}/.clang-format
+		${CMAKE_CURRENT_BINARY_DIR}
+		COMMENT "Copying .clang-format to the build directory."
+	)
+endif()
