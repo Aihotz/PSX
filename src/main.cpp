@@ -15,6 +15,12 @@
 
 #include <chrono>
 
+namespace
+{
+    static constexpr int WINDOW_WIDTH = 1280;
+    static constexpr int WINDOW_HEIGHT = 720;
+}
+
 void DebugCallback(
     gl::GLenum        source,
     gl::GLenum        type,
@@ -95,7 +101,7 @@ int main(int, char**)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     Uint32      window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;
-    SDL_Window* window       = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", 1280, 720, window_flags);
+    SDL_Window* window       = SDL_CreateWindow("PSX", WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
     if (window == nullptr)
     {
         printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
@@ -535,7 +541,7 @@ void Update(float delta)
 
 void Render()
 {
-    static constexpr glm::ivec2 window_size = glm::ivec2 { 1280, 720 };
+    static constexpr glm::ivec2 window_size = glm::ivec2 { WINDOW_WIDTH, WINDOW_HEIGHT };
 
     glViewport(0, 0, window_size.x, window_size.y);
     glScissor(0, 0, window_size.x, window_size.y);
