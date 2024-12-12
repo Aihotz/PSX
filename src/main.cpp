@@ -435,7 +435,7 @@ void Initialize()
 
     objects.push_back(
         Object {
-            .m_position { 0.f, 0.f, 0.f },
+            .m_position { 0.f, 0.f, 0.5f },
             .m_rotation { 0.f, 0.f, 0.f },
             .m_scale { 1.0f, 1.0f, 1.0f },
 
@@ -443,7 +443,7 @@ void Initialize()
         });
 
     camera.m_viewMatrix       = glm::lookAt(glm::vec3(0, 0, 3), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-    camera.m_projectionMatrix = glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 100.0f);
+    camera.m_projectionMatrix = glm::perspective(glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 100.0f);
 
     for (Object& object : objects)
         object.Initialize();
@@ -456,6 +456,7 @@ void Initialize()
 		layout(location = 2) in vec2 textureCoordinates;
 
 		out vec2 fragTextureCoordinates;
+        out float fragW;
 
 		layout(location = 0) uniform mat4 viewproj;
 		layout(location = 1) uniform mat4 model;
@@ -463,7 +464,8 @@ void Initialize()
 		void main()
 		{
 			gl_Position = viewproj * model * vec4(position, 1.0f);
-			fragTextureCoordinates = textureCoordinates;
+            fragW = gl_Position.w;
+			fragTextureCoordinates = textureCoordinates * fragW;
 		}
 	)";
 
@@ -473,12 +475,13 @@ void Initialize()
 		in vec2 fragTextureCoordinates;
 
 		out vec4 color;
+        in float fragW;
 
 		layout(binding = 0) uniform sampler2D textureData;
 
 		void main()
 		{
-			color = texture(textureData, fragTextureCoordinates);
+			color = texture(textureData, fragTextureCoordinates / fragW);
 		}
 	)";
 
