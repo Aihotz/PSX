@@ -496,7 +496,7 @@ void Initialize()
     {
         GLchar infoLog[512];
         glGetShaderInfoLog(vertex_shader, 512, nullptr, infoLog);
-        std::cerr << "Error: Shader compilation failed: " << infoLog << std::endl;
+        std::cerr << "Error: Fragment shader compilation failed: " << infoLog << std::endl;
     }
 
     GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -509,7 +509,7 @@ void Initialize()
     {
         GLchar infoLog[512];
         glGetShaderInfoLog(fragment_shader, 512, nullptr, infoLog);
-        std::cerr << "Error: Shader compilation failed: " << infoLog << std::endl;
+        std::cerr << "Error: Vertex shader compilation failed: " << infoLog << std::endl;
     }
 
     shader = glCreateProgram();
@@ -561,4 +561,6 @@ void Shutdown()
 {
     for (Object& object : objects)
         object.Shutdown();
+
+    glDeleteProgram(shader);
 }
