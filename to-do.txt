@@ -1,0 +1,47 @@
+framebuffer
+16-bit (5,5,5 + toggle transparency) color depth on general games framebuffer; 24-bit on still images or cinematics
+resolution 240p (320x240) / 480i (640x480; interlacing; on menus, UI, cutscenes)
+non square pixels...?
+no z-buffer, but rather polygon sorting (will probably discard this)
+no FPU -> vertex jitter (relative to screen space!), seams or gaps between polygons
+
+textures
+texture quantization (limited color palettes, 4-bit or 8-bit sometimes)
+non-perspective correct affine texture mapping
+textures of 256x256 at most in general
+no min/max sampling, always nearest/point filter
+
+dithering
+texture dithering (Floyd-Steinberg stochastic, Bayer matrices fixed pattern)
+general dithering (post-processing after quantizing to RGB555)
+dithering not on linear space, directly in display's gammacompressed (sRGB-like) space
+(for instance, apply gamma correction before dithering and reverse it after)
+dithering for transparency
+
+models
+low poly -> <300 per character in many cases
+flat shading instead of textures sometimes, no PBR, simple diffuse shading
+vertex colors to fake lighting
+pre-baked lighting
+gouraud shading instead of blinn-phong
+aggresive triangle clipping...?
+
+audio compressed and low sample rate -> ~24kHz or less
+many used MIDI-like soundtracks
+
+CRT effects
+scanlines
+subtle bloom from bright colors bleeding into surrounding areas
+colors bleeding
+barrel distortion
+color smearing...?
+dot crawl -> "noise" near high contrast edges
+noise
+composite video!!!
+
+fog for draw distance limitations (flat-colored / dithered)
+particles -> simple 2D sprites with additive blending or dithering
+UI elements low-res, pixelated, often pre-rendered as sprites
+fonts were bitmap-based and aliased
+usually fixed cameras or primitive follow-cams
+trees with two crossing planes for instance
