@@ -347,10 +347,14 @@ namespace
     std::vector<Object> objects;
 
     GLuint shader;
+
+    bool usingAffineTextureMapping;
 } // namespace
 
 void Initialize()
 {
+    usingAffineTextureMapping = true;
+
     // vsync
     SDL_GL_SetSwapInterval(1);
 
@@ -460,11 +464,18 @@ void Initialize()
 
 		layout(location = 0) uniform mat4 viewproj;
 		layout(location = 1) uniform mat4 model;
+        layout(location = 2) uniform bool usingAffineTextureMapping;
 
 		void main()
 		{
 			gl_Position = viewproj * model * vec4(position, 1.0f);
-            fragW = gl_Position.w;
+
+            fragW = 1.0f;
+            if(usingAffineTextureMapping)
+            {
+                fragW = gl_Position.w;
+            }
+
 			fragTextureCoordinates = textureCoordinates * fragW;
 		}
 	)";
@@ -542,8 +553,22 @@ void Update(float delta)
     }
 }
 
+void RenderGUI()
+{
+    if (ImGui::Begin("Features"))
+    {
+        ImGui::Checkbox("Affine texture mapping", &usingAffineTextureMapping);
+    }
+    ImGui::End();
+}
+
 void Render()
 {
+    // bind program
+    // ...
+
+    glUniform1i(2, static_cast<int>(usingAffineTextureMapping));
+
     static constexpr glm::ivec2 window_size = glm::ivec2 { WINDOW_WIDTH, WINDOW_HEIGHT };
 
     glViewport(0, 0, window_size.x, window_size.y);
@@ -555,6 +580,8 @@ void Render()
 
     for (const Object& object : objects)
         object.Render(view_projection, shader);
+
+    RenderGUI();
 }
 
 void Shutdown()
