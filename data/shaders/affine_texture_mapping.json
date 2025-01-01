@@ -1,0 +1,4 @@
+{
+  "vertex": "data/shaders/vertex/affine_texture_mapping.vert",
+  "fragment": "data/shaders/fragment/affine_texture_mapping.frag"
+}
