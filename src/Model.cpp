@@ -10,7 +10,7 @@
 
 using namespace gl;
 
-void LoadModel(const std::string& filepath, std::vector<Vertex>& vertices, std::vector<int>& indices)
+void LoadModel(const std::string& filepath, std::vector<Vertex>& vertices, std::vector<unsigned int>& indices)
 {
 	tinyobj::ObjReaderConfig reader_config;
 	reader_config.mtl_search_path = "./"; // path to material files
@@ -52,7 +52,7 @@ void LoadModel(const std::string& filepath, std::vector<Vertex>& vertices, std::
 	vertices.reserve(attrib.vertices.size() / fv);
 	indices.reserve(indexCount);
 
-	std::map<std::tuple<int, int, int>, int> unique_vertices;
+	std::map<std::tuple<int, int, int>, unsigned int> unique_vertices;
 
 	// loop over shapes
 	size_t shapes_size = shapes.size();
@@ -79,7 +79,7 @@ void LoadModel(const std::string& filepath, std::vector<Vertex>& vertices, std::
 				}
 
 				size_t current_index = unique_vertices.size();
-				unique_vertices[key] = current_index;
+				unique_vertices[key] = static_cast<unsigned int>(current_index);
 				indices.push_back(unique_vertices[key]);
 
 				Vertex vertex;
@@ -128,19 +128,19 @@ void LoadModel(const std::string& filepath, std::vector<Vertex>& vertices, std::
 	}
 }
 
-void CreateCube(std::vector<Vertex>& vertices, std::vector<int>& indices)
+void CreateCube(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices)
 {
 	constexpr glm::vec3 white { 1.0f, 1.0f, 1.0f };
 
 	constexpr glm::vec3 positions[] {
-		{ -0.5f, 0.5f,  0.5f }, // 0 - left top near
-		{ -0.5f, -0.5f, 0.5f }, // 1 - left bottom near
-		{ 0.5f,	-0.5f, 0.5f }, // 2 - right bottom near
-		{ 0.5f,	0.5f,  0.5f }, // 3 - right top near
-		{ 0.5f,	0.5f,  -0.5f  }, // 4 - right top far
-		{ 0.5f,	-0.5f, -0.5f	}, // 5 - right bottom far
-		{ -0.5f, -0.5f, -0.5f	 }, // 6 - left bottom far
-		{ -0.5f, 0.5f,  -0.5f	}, // 7 - left top far
+		{ -0.5f, 0.5f,  0.5f	}, // 0 - left top near
+		{ -0.5f, -0.5f, 0.5f	 }, // 1 - left bottom near
+		{ 0.5f,	-0.5f, 0.5f	}, // 2 - right bottom near
+		{ 0.5f,	0.5f,  0.5f  }, // 3 - right top near
+		{ 0.5f,	0.5f,  -0.5f }, // 4 - right top far
+		{ 0.5f,	-0.5f, -0.5f }, // 5 - right bottom far
+		{ -0.5f, -0.5f, -0.5f }, // 6 - left bottom far
+		{ -0.5f, 0.5f,  -0.5f }, // 7 - left top far
 	};
 
 	constexpr glm::vec2 uvs[] {
@@ -227,12 +227,32 @@ void CreateCube(std::vector<Vertex>& vertices, std::vector<int>& indices)
 	}
 }
 
+void CreateQuad(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices)
+{
+	vertices = {
+		{ { -0.5f, 0.5f, 0.0f },	 { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, -0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, -0.5f, 0.0f },	 { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, 0.5f, 0.0f },	{ 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+	};
+
+	indices = { 0, 1, 2, 0, 2, 3 };
+}
+
 Model::Model(const std::string& filepath)
 {
 	std::vector<Vertex> vertices;
-	std::vector<int>	indices;
+	std::vector<unsigned int>	indices;
 
-	if (std::filesystem::exists(std::filesystem::path { filepath }))
+	if (filepath == CUBE_PRIMITIVE)
+	{
+		CreateCube(vertices, indices);
+	}
+	else if (filepath == QUAD_PRIMITIVE)
+	{
+		CreateQuad(vertices, indices);
+	}
+	else if (std::filesystem::exists(std::filesystem::path { filepath }))
 	{
 		LoadModel(filepath, vertices, indices);
 	}
@@ -280,7 +300,6 @@ Model::Model(const std::string& filepath)
 		Vertex::COLOR, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, color)));
 
 	// unbind
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 }
 

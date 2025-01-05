@@ -24,6 +24,8 @@ class Texture
 				std::vector<std::pair<gl::GLenum, gl::GLint>> parameters;
 		};
 
+		static constexpr char RENDER_TARGET[] = "EMPTY_TEXTURE";
+
 		Texture(const std::string& filepath);
 
 		~Texture();

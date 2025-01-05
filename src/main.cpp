@@ -1,3 +1,5 @@
+#define USING_IMGUI
+
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 
@@ -19,8 +21,8 @@
 
 namespace
 {
-	static constexpr int WINDOW_WIDTH  = 1280;
-	static constexpr int WINDOW_HEIGHT = 720;
+	static constexpr int WINDOW_WIDTH  = 1920;
+	static constexpr int WINDOW_HEIGHT = 1080;
 } //namespace
 
 void DebugCallback(
@@ -193,10 +195,13 @@ int main(int, char**)
 
 		Render();
 
+		gl::glPushDebugGroup(gl::GL_DEBUG_SOURCE_APPLICATION, 0, -1, "ImGui");
 		// rendering
 		ImGui::Render();
 		gl::glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		gl::glPopDebugGroup();
+
 		SDL_GL_SwapWindow(window);
 	}
 
@@ -252,7 +257,7 @@ struct Object
 								* glm::scale(glm::mat4(1.0f), m_scale);
 
 			// send uniforms to shader
-			glUniformMatrix4fv(1, 1, GL_FALSE, &model_mtx[0][0]);
+			glUniformMatrix4fv(2, 1, GL_FALSE, &model_mtx[0][0]);
 
 			// send texture
 			if (texture.IsValid())
@@ -264,8 +269,8 @@ struct Object
 			// render
 			model->Render();
 
-			glBindVertexArray(0);
 			glBindTexture(GL_TEXTURE_2D, 0);
+			glBindVertexArray(0);
 		};
 };
 
@@ -273,10 +278,15 @@ namespace
 {
 	Camera				camera;
 	std::vector<Object> objects;
+	float				rotation_duration;
 
-	Resource<ShaderProgram> shader;
+	Resource<ShaderProgram> geometry_shader;
+	Resource<ShaderProgram> screen_shader;
+
+	Resource<Model> quad;
 
 	bool usingAffineTextureMapping;
+	bool showingAllTextures;
 
 	// progressive: 320x240
 	// interlaced:  640x480
@@ -298,97 +308,101 @@ namespace
 	GLuint gDepth[2];
 } // namespace
 
-void GenerateGBuffers(bool usingInterlaced)
+void GenerateGBuffers()
 {
-	int index = static_cast<int>(usingInterlaced);
-
-	glGenFramebuffers(1, &GBuffer[index]);
-	glBindFramebuffer(GL_FRAMEBUFFER, GBuffer[index]);
-
-	// position attachment
-	glGenTextures(1, &gPosition[index]);
-	glBindTexture(GL_TEXTURE_2D, gPosition[index]);
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_RGBA16I,
-		framebufferResolution[index].x,
-		framebufferResolution[index].y,
-		0,
-		GL_RGBA_INTEGER,
-		GL_SHORT,
-		nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition[index], 0);
-
-	// normal attachment
-	glGenTextures(1, &gNormal[index]);
-	glBindTexture(GL_TEXTURE_2D, gNormal[index]);
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_RGBA16F,
-		framebufferResolution[index].x,
-		framebufferResolution[index].y,
-		0,
-		GL_RGBA,
-		GL_HALF_FLOAT,
-		nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal[index], 0);
-
-	// albedo attachment
-	glGenTextures(1, &gAlbedo[index]);
-	glBindTexture(GL_TEXTURE_2D, gAlbedo[index]);
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_RGB5_A1,
-		framebufferResolution[index].x,
-		framebufferResolution[index].y,
-		0,
-		GL_RGBA,
-		GL_UNSIGNED_SHORT_5_5_5_1,
-		nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo[index], 0);
-
-	GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-	glDrawBuffers(sizeof(attachments) / sizeof(attachments[0]), attachments);
-
-	// depth attachment
-	glGenTextures(1, &gDepth[index]);
-	glBindTexture(GL_TEXTURE_2D, gDepth[index]);
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_DEPTH_COMPONENT16,
-		framebufferResolution[index].x,
-		framebufferResolution[index].y,
-		0,
-		GL_DEPTH_COMPONENT,
-		GL_FLOAT,
-		nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gDepth[index], 0);
-
-	// check for completeness
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	for (int index = 0; index < 2; index++)
 	{
-		std::cerr << "Error: Framebuffer is not complete!" << std::endl;
-	}
+		glGenFramebuffers(1, &GBuffer[index]);
+		glBindFramebuffer(GL_FRAMEBUFFER, GBuffer[index]);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		// position attachment
+		glGenTextures(1, &gPosition[index]);
+		glBindTexture(GL_TEXTURE_2D, gPosition[index]);
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_RGBA16F,
+			framebufferResolution[index].x,
+			framebufferResolution[index].y,
+			0,
+			GL_RGBA,
+			GL_HALF_FLOAT,
+			nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition[index], 0);
+
+		// normal attachment
+		glGenTextures(1, &gNormal[index]);
+		glBindTexture(GL_TEXTURE_2D, gNormal[index]);
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_RGBA16F,
+			framebufferResolution[index].x,
+			framebufferResolution[index].y,
+			0,
+			GL_RGBA,
+			GL_HALF_FLOAT,
+			nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal[index], 0);
+
+		// albedo attachment
+		glGenTextures(1, &gAlbedo[index]);
+		glBindTexture(GL_TEXTURE_2D, gAlbedo[index]);
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_RGB5_A1,
+			framebufferResolution[index].x,
+			framebufferResolution[index].y,
+			0,
+			GL_RGBA,
+			GL_UNSIGNED_SHORT_5_5_5_1,
+			nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo[index], 0);
+
+		GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
+		glDrawBuffers(sizeof(attachments) / sizeof(attachments[0]), attachments);
+
+		// depth attachment
+		glGenTextures(1, &gDepth[index]);
+		glBindTexture(GL_TEXTURE_2D, gDepth[index]);
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_DEPTH_COMPONENT16,
+			framebufferResolution[index].x,
+			framebufferResolution[index].y,
+			0,
+			GL_DEPTH_COMPONENT,
+			GL_FLOAT,
+			nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gDepth[index], 0);
+
+		// check for completeness
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		{
+			std::cerr << "Error: Framebuffer is not complete!" << std::endl;
+		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
 }
 
 void Initialize()
 {
 	usingAffineTextureMapping = true;
 	usingInterlacedResolution = false;
+	showingAllTextures		  = false;
+
+	rotation_duration = 5.0f;
 
 	// vsync
 	SDL_GL_SetSwapInterval(1);
@@ -412,24 +426,30 @@ void Initialize()
 	objects.push_back(Object {});
 
 	camera.m_viewMatrix
-		= glm::lookAt(glm::vec3 { 0.0f, 0.0f, 20.0f }, glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 1.0f, 0.0f });
+		= glm::lookAt(glm::vec3 { 0.0f, 75.0f, 125.0f }, glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 1.0f, 0.0f });
 	camera.m_projectionMatrix
-		= glm::perspective(glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 100.0f);
+		= glm::perspective(glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 1000.0f);
 
-	Resource<Model>	  model { "data/meshes/house.obj" };
-	Resource<Texture> texture { "data/images/arrow.png" };
-	shader = Resource<ShaderProgram> { "data/shaders/affine_texture_mapping.json" };
+	//Resource<Model>	  model { "data/meshes/maxwell.obj" };
+	Resource<Texture> texture { "data/images/maxwell.jpg" };
+	Resource<Model>	  model { Model::CUBE_PRIMITIVE };
+	//Resource<Texture> texture { "data/images/maxwell.jpg" };
+
+	geometry_shader = Resource<ShaderProgram> { "data/shaders/affine_texture_mapping.json" };
+	screen_shader	= Resource<ShaderProgram> { "data/shaders/screen_rendering.json" };
+
+	quad = Resource<Model> { Model::QUAD_PRIMITIVE };
 
 	for (Object& obj : objects)
 	{
 		obj.model	= model;
 		obj.texture = texture;
 
-		obj.m_scale = glm::vec3 { 1.0f, 1.0f, 1.0f };
+		//obj.m_scale = glm::vec3 { 0.2f };
+		obj.m_scale = glm::vec3 { 50.0f };
 	}
 
-	//GenerateGBuffers(true);
-	//GenerateGBuffers(false);
+	GenerateGBuffers();
 }
 
 void Update(float delta)
@@ -437,10 +457,10 @@ void Update(float delta)
 	// rotate all objects around the vertical axis at a rate of 360 degrees per 5 seconds
 	for (Object& object : objects)
 	{
-		object.m_rotation.y += glm::radians(360.0f / 5.0f) * delta;
+		object.m_rotation.y += -glm::radians(360.0f / rotation_duration) * delta;
 
 		// also rotate slightly around the right axis, but slower
-		object.m_rotation.x += glm::radians(360.0f / 20.0f) * delta;
+		//object.m_rotation.x += glm::radians(360.0f / 20.0f) * delta;
 	}
 }
 
@@ -449,28 +469,55 @@ void RenderGUI()
 	if (ImGui::Begin("Features"))
 	{
 		ImGui::Checkbox("Affine texture mapping", &usingAffineTextureMapping);
+
+		ImGui::DragFloat("Rotation duration", &rotation_duration);
 	}
 	ImGui::End();
 }
 
 void Render()
 {
-	if (shader.IsValid() == false)
-		return;
+	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "Geometry pass");
 
-	shader->Bind();
+	geometry_shader->Bind();
 
-	glUniform1i(2, static_cast<int>(usingAffineTextureMapping));
+	glUniform1i(3, static_cast<int>(usingAffineTextureMapping));
 
-	//// bind non-default framebuffer
-	//constexpr int mode = 0;
-	//glBindFramebuffer(GL_FRAMEBUFFER, GBuffer[mode]);
+	// bind non-default framebuffer
+	constexpr int mode = 0;
+	glBindFramebuffer(GL_FRAMEBUFFER, GBuffer[mode]);
 
-	//// clear
-	//glViewport(0, 0, framebufferResolution[mode].x, framebufferResolution[mode].y);
-	//glScissor(0, 0, framebufferResolution[mode].x, framebufferResolution[mode].y);
-	//glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// clear
+	glViewport(0, 0, framebufferResolution[mode].x, framebufferResolution[mode].y);
+	glScissor(0, 0, framebufferResolution[mode].x, framebufferResolution[mode].y);
+
+	// position
+	glm::vec4 position_clear { glm::vec3 { std::numeric_limits<float>::max() }, 0 };
+	glClearBufferfv(GL_COLOR, 0, &position_clear[0]);
+
+	// normal
+	glm::vec4 normal_clear { 0.0f, 0.0f, -1.0f, 0.0f };
+	glClearBufferfv(GL_COLOR, 1, &normal_clear[0]);
+
+	// albedo
+	glm::vec4 color_clear { glm::vec3 { 0.7f } , 1.0f};
+	glClearBufferfv(GL_COLOR, 2, &color_clear[0]);
+
+	// depth
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	// render objects
+	glUniformMatrix4fv(0, 1, GL_FALSE, &camera.m_projectionMatrix[0][0]);
+	glUniformMatrix4fv(1, 1, GL_FALSE, &camera.m_viewMatrix[0][0]);
+
+	for (const Object& object : objects)
+		object.Render();
+
+	glPopDebugGroup();
+
+	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "Render to screen");
+
+	screen_shader->Bind();
 
 	// render regular framebuffer (screen)
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -479,29 +526,84 @@ void Render()
 	static constexpr glm::ivec2 window_size = glm::ivec2 { WINDOW_WIDTH, WINDOW_HEIGHT };
 	glViewport(0, 0, window_size.x, window_size.y);
 	glScissor(0, 0, window_size.x, window_size.y);
-	glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// render objects
-	glm::mat4 view_projection = camera.m_projectionMatrix * camera.m_viewMatrix;
-	glUniformMatrix4fv(0, 1, GL_FALSE, &view_projection[0][0]);
+	int scale_factor = 1;
+	while (framebufferResolution[mode].x * (scale_factor + 1) <= window_size.x
+		   && framebufferResolution[mode].y * (scale_factor + 1) <= window_size.y)
+	{
+		scale_factor++;
+	}
 
-	for (const Object& object : objects)
-		object.Render();
+	glm::ivec2 uniform_scaled_size = scale_factor * framebufferResolution[mode];
 
-	//// render regular framebuffer (screen)
-	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(
+		(window_size.x - uniform_scaled_size.x) / 2,
+		(window_size.y - uniform_scaled_size.y) / 2,
+		uniform_scaled_size.x,
+		uniform_scaled_size.y);
+	glScissor(
+		(window_size.x - uniform_scaled_size.x) / 2,
+		(window_size.y - uniform_scaled_size.y) / 2,
+		uniform_scaled_size.x,
+		uniform_scaled_size.y);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	//// clear
-	//static constexpr glm::ivec2 window_size = glm::ivec2 { WINDOW_WIDTH, WINDOW_HEIGHT };
-	//glViewport(0, 0, window_size.x, window_size.y);
-	//glScissor(0, 0, window_size.x, window_size.y);
-	//glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// bind textures
+	glActiveTexture(GL_TEXTURE0);
 
-	// draw to screen
+	glm::mat4 quad_model_matrix;
+	if (showingAllTextures)
+	{
+		// scale for the textures
+		glUniform1f(1, 1.0f);
+
+		// near and far
+		glUniform2f(3, 0.1f, 100.0f);
+
+		GLuint	  attachments[]	  = { gPosition[mode], gNormal[mode], gAlbedo[mode], gDepth[mode] };
+		glm::vec2 displacements[] = {
+			{ -0.5f, -0.5f },
+			  { 0.5f,  0.5f  },
+			  { -0.5f, 0.5f	},
+			   { 0.5f,  -0.5f }
+		};
+
+		for (int i = 0; i < 4; i++)
+		{
+			// bind the current attachment
+			glBindTexture(GL_TEXTURE_2D, attachments[i]);
+			glUniform1i(2, i);
+
+			// matrix to render in each of the screen quadrants
+			quad_model_matrix = glm::translate(glm::mat4(1.0f), glm::vec3(displacements[i], 0.0f));
+			glUniformMatrix4fv(0, 1, GL_FALSE, &quad_model_matrix[0][0]);
+			quad->Render();
+		}
+	}
+	else
+	{
+		// scale for the texture
+		glUniform1f(1, 2.0f);
+
+		// using the color texture
+		glBindTexture(GL_TEXTURE_2D, gAlbedo[mode]);
+		glUniform1i(2, 2);
+
+		// identity matrix (in addition to the 2x scale)
+		quad_model_matrix = glm::identity<glm::mat4>();
+		glUniformMatrix4fv(0, 1, GL_FALSE, &quad_model_matrix[0][0]);
+		quad->Render();
+	}
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindVertexArray(0);
 
 	glUseProgram(0);
+
+	glPopDebugGroup();
 
 	RenderGUI();
 }

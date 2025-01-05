@@ -35,7 +35,12 @@ Texture::Texture(const std::string& filepath)
 
 	bool loaded_from_stb = false;
 
-	if (std::filesystem::exists(std::filesystem::path { filepath }))
+	if (filepath == RENDER_TARGET)
+	{
+		// expects UploadTextureData() at some point
+		return;
+	} 
+	else if (std::filesystem::exists(std::filesystem::path { filepath }))
 	{
 		int comp;
 		texture_data = stbi_load(filepath.c_str(), &texture_info.size.x, &texture_info.size.y, &comp, 4);

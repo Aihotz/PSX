@@ -6,23 +6,25 @@
 
 class Model
 {
-    gl::GLuint vao;
-    gl::GLuint vbo;
-    gl::GLuint ebo;
+		gl::GLuint vao;
+		gl::GLuint vbo;
+		gl::GLuint ebo;
 
-    int vertexCount;
-	int indexCount;
+		int vertexCount;
+		int indexCount;
 
-public:
+	public:
+		static constexpr char QUAD_PRIMITIVE[] = "QUAD_PRIMITIVE";
+		static constexpr char CUBE_PRIMITIVE[] = "CUBE_PRIMITIVE";
 
-    Model(const std::string& filepath);
-	~Model();
+		Model(const std::string& filepath);
+		~Model();
 
-    void Render();
+		void Render();
 
-    // avoid unintended copying
-    Model(const Model&) = delete;
-    Model& operator=(const Model&) = delete;
+		// avoid unintended copying
+		Model(const Model&)			   = delete;
+		Model& operator=(const Model&) = delete;
 };
 
 #endif
