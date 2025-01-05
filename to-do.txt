@@ -7,6 +7,7 @@ no z-buffer, but rather polygon sorting (will probably discard this)
 no FPU -> vertex jitter (relative to screen space!), seams or gaps between polygons
 
 textures
+they could have 24-bit color depth
 texture quantization (limited color palettes, 4-bit or 8-bit sometimes)
 non-perspective correct affine texture mapping
 textures of 256x256 at most in general

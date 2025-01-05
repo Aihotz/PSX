@@ -400,12 +400,15 @@ void Initialize()
 {
 	usingAffineTextureMapping = true;
 	usingInterlacedResolution = false;
-	showingAllTextures		  = false;
+	showingAllTextures		  = true;
 
 	rotation_duration = 5.0f;
 
 	// vsync
 	SDL_GL_SetSwapInterval(1);
+
+	// dithering!
+	glDisable(GL_DITHER);
 
 	// enable backface removal
 	glEnable(GL_CULL_FACE);
@@ -431,9 +434,9 @@ void Initialize()
 		= glm::perspective(glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 1000.0f);
 
 	//Resource<Model>	  model { "data/meshes/maxwell.obj" };
-	Resource<Texture> texture { "data/images/maxwell.jpg" };
-	Resource<Model>	  model { Model::CUBE_PRIMITIVE };
 	//Resource<Texture> texture { "data/images/maxwell.jpg" };
+	Resource<Model>	  model { Model::CUBE_PRIMITIVE };
+	Resource<Texture> texture { "data/colortest.png" };
 
 	geometry_shader = Resource<ShaderProgram> { "data/shaders/affine_texture_mapping.json" };
 	screen_shader	= Resource<ShaderProgram> { "data/shaders/screen_rendering.json" };
@@ -446,7 +449,7 @@ void Initialize()
 		obj.texture = texture;
 
 		//obj.m_scale = glm::vec3 { 0.2f };
-		obj.m_scale = glm::vec3 { 50.0f };
+		obj.m_scale = glm::vec3 { 100.0f };
 	}
 
 	GenerateGBuffers();
@@ -457,7 +460,7 @@ void Update(float delta)
 	// rotate all objects around the vertical axis at a rate of 360 degrees per 5 seconds
 	for (Object& object : objects)
 	{
-		object.m_rotation.y += -glm::radians(360.0f / rotation_duration) * delta;
+		//object.m_rotation.y += -glm::radians(360.0f / rotation_duration) * delta;
 
 		// also rotate slightly around the right axis, but slower
 		//object.m_rotation.x += glm::radians(360.0f / 20.0f) * delta;
