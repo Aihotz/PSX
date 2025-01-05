@@ -1,6 +1,7 @@
 framebuffer
 16-bit (5,5,5 + toggle transparency) color depth on general games framebuffer; 24-bit on still images or cinematics
 ^- but textures could be 24-bits, that is why the dithering was necessary to remove banding arficats when moving to 16-bits
+^- for instance, for pre-rendered background: render 24-bit background, then dynamic objects on 16-bit framebuffer. Then alpha blend them
 resolution 240p (320x240) / 480i (640x480; interlacing; on menus, UI, cutscenes)
 non square pixels...?
 no z-buffer, but rather polygon sorting (will probably discard this)
