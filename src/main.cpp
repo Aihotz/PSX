@@ -19,10 +19,12 @@
 
 #include <chrono>
 
+#include "InputManager.hpp"
+
 namespace
 {
-	static constexpr int WINDOW_WIDTH  = 1920;
-	static constexpr int WINDOW_HEIGHT = 1080;
+	static constexpr int WINDOW_WIDTH  = 1280;
+	static constexpr int WINDOW_HEIGHT = 720;
 } //namespace
 
 void DebugCallback(
@@ -174,12 +176,16 @@ int main(int, char**)
 				running = false;
 			if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window))
 				running = false;
+
+			InputManager::GetInstance().ProcessEvents(event);
 		}
 		if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
 		{
 			SDL_Delay(10);
 			continue;
 		}
+
+		InputManager::GetInstance().Update();
 
 		// compute delta time
 		std::chrono::high_resolution_clock::time_point current_time = std::chrono::high_resolution_clock::now();
@@ -398,6 +404,8 @@ void GenerateGBuffers()
 
 void Initialize()
 {
+	InputManager::GetInstance().Initialize();
+
 	usingAffineTextureMapping = true;
 	usingInterlacedResolution = false;
 	showingAllTextures		  = true;
@@ -448,8 +456,8 @@ void Initialize()
 		obj.model	= model;
 		obj.texture = texture;
 
-		obj.m_scale = glm::vec3 { 0.2f };
-		//obj.m_scale = glm::vec3 { 100.0f };
+		//obj.m_scale = glm::vec3 { 0.2f };
+		obj.m_scale = glm::vec3 { 100.0f };
 	}
 
 	GenerateGBuffers();
@@ -464,6 +472,19 @@ void Update(float delta)
 
 		// also rotate slightly around the right axis, but slower
 		//object.m_rotation.x += glm::radians(360.0f / 20.0f) * delta;
+	}
+
+	if (InputManager::GetInstance().Triggered(Keyboard::A))
+	{
+		std::cout << "TRIGGERED";
+	}
+	if (InputManager::GetInstance().Pressed(Keyboard::S))
+	{
+		std::cout << "PRESSED";
+	}
+	if (InputManager::GetInstance().Released(Keyboard::D))
+	{
+		std::cout << "RELEASED";
 	}
 }
 
@@ -613,5 +634,6 @@ void Render()
 
 void Shutdown()
 {
+	InputManager::GetInstance().Shutdown();
 	ResourceManager::GetInstance().DeleteResources();
 }

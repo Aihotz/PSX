@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 3.20)
 cmake_policy(SET CMP0120 NEW)
 
 set(SOURCE_FILES
-    "JSONUtils.cpp"    "JSONUtils.hpp"
+    "KeyCodes.hpp"
+"InputManager.cpp"    "InputManager.hpp"
+"JSONUtils.cpp"    "JSONUtils.hpp"
 "Vertex.hpp"
 "Texture.cpp"    		"Texture.hpp"
 "ShaderProgram.cpp"    	"ShaderProgram.hpp"
