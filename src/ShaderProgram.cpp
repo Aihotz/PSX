@@ -47,7 +47,7 @@ ShaderProgram::ShaderProgram(const std::string& filepath)
 
 		if (length > 0)
 		{
-			log.reserve(length);
+			log.resize(length);
 
 			int written = 0;
 			gl::glGetProgramInfoLog(handle, length, &written, log.data());
@@ -176,7 +176,7 @@ ShaderProgram::Shader::Shader(const std::string& filepath)
 
 		if (length > 0)
 		{
-			log.reserve(length);
+			log.resize(length);
 
 			int written = 0;
 			gl::glGetShaderInfoLog(handle, length, &written, log.data());

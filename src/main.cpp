@@ -1,5 +1,8 @@
 #define USING_IMGUI
 
+#define GLM_ENABLE_EXPERIMENTAL
+#define GLM_FORCE_RADIANS
+
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 
@@ -13,18 +16,33 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl3.h>
 
+// NEW INCLUDES
+#include "LogicSystem.hpp"
+#include "GameObjectManager.hpp"
+#include "HierarchyManager.hpp"
+#include "InputManager.hpp"
+#include "ResourceManager.hpp"
+
 #include <stb_image.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <iostream>
-
 #include <chrono>
 
-#include "InputManager.hpp"
+#include "Model.hpp"
+#include "ShaderProgram.hpp"
+#include "Texture.hpp"
+
+#include "GameObject.hpp"
+#include "LogicComponent.hpp"
+#include "TransformationComponent.hpp"
+#include "Transformation.hpp"
 
 namespace
 {
-	static constexpr int WINDOW_WIDTH  = 1280;
-	static constexpr int WINDOW_HEIGHT = 720;
+	static constexpr int WINDOW_WIDTH  = 1920;
+	static constexpr int WINDOW_HEIGHT = 1080;
 } //namespace
 
 void DebugCallback(
@@ -159,6 +177,7 @@ int main(int, char**)
 
 	stbi_set_flip_vertically_on_load(static_cast<bool>(true));
 
+	InputManager::GetInstance().Initialize();
 	Initialize();
 
 	// initialize delta time
@@ -186,6 +205,9 @@ int main(int, char**)
 		}
 
 		InputManager::GetInstance().Update();
+		LogicSystem::GetInstance().Update();
+		HierarchyManager::GetInstance().Update();
+		GameObjectManager::GetInstance().Update();
 
 		// compute delta time
 		std::chrono::high_resolution_clock::time_point current_time = std::chrono::high_resolution_clock::now();
@@ -213,6 +235,10 @@ int main(int, char**)
 
 	Shutdown();
 
+	InputManager::GetInstance().Shutdown();
+	GameObjectManager::GetInstance().Shutdown();
+	ResourceManager::GetInstance().DeleteResources();
+
 	// cleanup
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
@@ -225,42 +251,138 @@ int main(int, char**)
 	return 0;
 }
 
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include "ResourceManager.hpp"
-#include "Model.hpp"
-#include "ShaderProgram.hpp"
-#include "Texture.hpp"
-
 using namespace gl;
 
-struct Camera
+namespace
 {
-		glm::mat4 m_viewMatrix;
+	GameObject*				 camera;
+	std::vector<GameObject*> objects;
+	float					 rotation_duration;
+
+	Resource<ShaderProgram> geometry_shader;
+	Resource<ShaderProgram> screen_shader;
+
+	Resource<Model> quad;
+
+	bool usingAffineTextureMapping;
+	bool showingAllTextures;
+
+	// progressive: 320x240
+	// interlaced:  640x480
+	bool				 usingInterlacedResolution;
+	constexpr glm::ivec2 framebufferResolution { 640, 480 };
+
+	// deferred shading
+	GLuint GBuffer;
+
+	// position: x y z | ?
+	// normal:   x y z | ?
+	// albedo:   x y z | ?
+	GLuint gPosition, gNormal, gAlbedo;
+
+	// not in PSX, but will probably use it here
+	GLuint gDepth;
+
+	bool interlaced;
+} // namespace
+
+class DummyCamera : public LogicComponent
+{
+		TransformationComponent* transform;
+
 		glm::mat4 m_projectionMatrix;
+		glm::mat4 m_viewMatrix;
+
+	public:
+		float speed;
+
+		virtual void Initialize() override
+		{
+			transform = GetComponent<TransformationComponent>();
+
+			m_projectionMatrix = glm::perspective(
+				glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 1000.0f);
+
+			speed = 1.0f;
+		}
+
+		virtual void Update() override
+		{
+			Movement();
+
+			m_viewMatrix = glm::lookAt(
+				transform->GetWorldPosition(),
+				transform->GetWorldPosition() + transform->GetWorldRotation().forward,
+				Rotation::VECTOR_UP);
+		}
+
+		const glm::mat4& GetProjectionMatrix() const
+		{
+			return m_projectionMatrix;
+		}
+
+		const glm::mat4& GetViewMatrix() const
+		{
+			return m_viewMatrix;
+		}
+
+		void Movement()
+		{
+			InputManager& input = InputManager::GetInstance();
+
+			glm::vec2 input_movement = glm::vec2 { 0.0f };
+
+			if (input.Pressed(Keyboard::W))
+			{
+				input_movement.y = 1.0f;
+			}
+			else if (input.Pressed(Keyboard::S))
+			{
+				input_movement.y = -1.0f;
+			}
+
+			if (input.Pressed(Keyboard::A))
+			{
+				input_movement.x = -1.0f;
+			}
+			else if (input.Pressed(Keyboard::D))
+			{
+				input_movement.x = 1.0f;
+			}
+
+			input_movement *= speed;
+
+			glm::vec3 position = transform->GetWorldPosition() + input_movement.x * transform->GetWorldRotation().right
+							   + input_movement.y * transform->GetWorldRotation().forward;
+
+			transform->SetWorldPosition(position);
+		}
 };
 
-struct Object
+class MagicComponent : public LogicComponent
 {
-		glm::vec3 m_position;
-		glm::vec3 m_rotation;
-		glm::vec3 m_scale;
+		TransformationComponent* transform;
 
-		// mutable because bind operations are not const
-		mutable Resource<Model>	  model;
-		mutable Resource<Texture> texture;
+	public:
+		Resource<Model>	  model;
+		Resource<Texture> texture;
 
-		void Render() const
+		virtual void Initialize() override
+		{
+			transform = GetComponent<TransformationComponent>();
+		}
+
+		virtual void Update() override
+		{
+			transform->RotateAxis(-glm::radians(360.0f / rotation_duration) * (1.0f / 60.0f), Rotation::VECTOR_UP);
+		}
+
+		void Render()
 		{
 			if (model.IsValid() == false)
 				return;
 
-			glm::mat4 model_mtx = glm::translate(glm::mat4(1.0f), m_position)
-								* glm::rotate(glm::mat4(1.0f), m_rotation.x, glm::vec3(1, 0, 0))
-								* glm::rotate(glm::mat4(1.0f), m_rotation.y, glm::vec3(0, 1, 0))
-								* glm::rotate(glm::mat4(1.0f), m_rotation.z, glm::vec3(0, 0, 1))
-								* glm::scale(glm::mat4(1.0f), m_scale);
+			const glm::mat4& model_mtx = transform->GetWorldMatrix();
 
 			// send uniforms to shader
 			glUniformMatrix4fv(2, 1, GL_FALSE, &model_mtx[0][0]);
@@ -277,138 +399,100 @@ struct Object
 
 			glBindTexture(GL_TEXTURE_2D, 0);
 			glBindVertexArray(0);
-		};
+		}
 };
-
-namespace
-{
-	Camera				camera;
-	std::vector<Object> objects;
-	float				rotation_duration;
-
-	Resource<ShaderProgram> geometry_shader;
-	Resource<ShaderProgram> screen_shader;
-
-	Resource<Model> quad;
-
-	bool usingAffineTextureMapping;
-	bool showingAllTextures;
-
-	// progressive: 320x240
-	// interlaced:  640x480
-	bool				 usingInterlacedResolution;
-	constexpr glm::ivec2 framebufferResolution[2] {
-		glm::ivec2 { 320, 240 },
-		 glm::ivec2 { 640, 480 }
-	};
-
-	// deferred shading
-	GLuint GBuffer[2];
-
-	// position: x y z | ?
-	// normal:   x y z | ?
-	// albedo:   x y z | ?
-	GLuint gPosition[2], gNormal[2], gAlbedo[2];
-
-	// not in PSX, but will probably use it here
-	GLuint gDepth[2];
-} // namespace
 
 void GenerateGBuffers()
 {
-	for (int index = 0; index < 2; index++)
+	glGenFramebuffers(1, &GBuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, GBuffer);
+
+	// position attachment
+	glGenTextures(1, &gPosition);
+	glBindTexture(GL_TEXTURE_2D, gPosition);
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_RGBA16F,
+		framebufferResolution.x,
+		framebufferResolution.y,
+		0,
+		GL_RGBA,
+		GL_HALF_FLOAT,
+		nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
+
+	// normal attachment
+	glGenTextures(1, &gNormal);
+	glBindTexture(GL_TEXTURE_2D, gNormal);
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_RGBA16F,
+		framebufferResolution.x,
+		framebufferResolution.y,
+		0,
+		GL_RGBA,
+		GL_HALF_FLOAT,
+		nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
+
+	// albedo attachment
+	glGenTextures(1, &gAlbedo);
+	glBindTexture(GL_TEXTURE_2D, gAlbedo);
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_RGB5_A1,
+		framebufferResolution.x,
+		framebufferResolution.y,
+		0,
+		GL_RGBA,
+		GL_UNSIGNED_SHORT_5_5_5_1,
+		nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo, 0);
+
+	GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
+	glDrawBuffers(sizeof(attachments) / sizeof(attachments[0]), attachments);
+
+	// depth attachment
+	glGenTextures(1, &gDepth);
+	glBindTexture(GL_TEXTURE_2D, gDepth);
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_DEPTH_COMPONENT16,
+		framebufferResolution.x,
+		framebufferResolution.y,
+		0,
+		GL_DEPTH_COMPONENT,
+		GL_FLOAT,
+		nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gDepth, 0);
+
+	// check for completeness
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 	{
-		glGenFramebuffers(1, &GBuffer[index]);
-		glBindFramebuffer(GL_FRAMEBUFFER, GBuffer[index]);
-
-		// position attachment
-		glGenTextures(1, &gPosition[index]);
-		glBindTexture(GL_TEXTURE_2D, gPosition[index]);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_RGBA16F,
-			framebufferResolution[index].x,
-			framebufferResolution[index].y,
-			0,
-			GL_RGBA,
-			GL_HALF_FLOAT,
-			nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition[index], 0);
-
-		// normal attachment
-		glGenTextures(1, &gNormal[index]);
-		glBindTexture(GL_TEXTURE_2D, gNormal[index]);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_RGBA16F,
-			framebufferResolution[index].x,
-			framebufferResolution[index].y,
-			0,
-			GL_RGBA,
-			GL_HALF_FLOAT,
-			nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal[index], 0);
-
-		// albedo attachment
-		glGenTextures(1, &gAlbedo[index]);
-		glBindTexture(GL_TEXTURE_2D, gAlbedo[index]);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_RGB5_A1,
-			framebufferResolution[index].x,
-			framebufferResolution[index].y,
-			0,
-			GL_RGBA,
-			GL_UNSIGNED_SHORT_5_5_5_1,
-			nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo[index], 0);
-
-		GLenum attachments[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-		glDrawBuffers(sizeof(attachments) / sizeof(attachments[0]), attachments);
-
-		// depth attachment
-		glGenTextures(1, &gDepth[index]);
-		glBindTexture(GL_TEXTURE_2D, gDepth[index]);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_DEPTH_COMPONENT16,
-			framebufferResolution[index].x,
-			framebufferResolution[index].y,
-			0,
-			GL_DEPTH_COMPONENT,
-			GL_FLOAT,
-			nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gDepth[index], 0);
-
-		// check for completeness
-		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		{
-			std::cerr << "Error: Framebuffer is not complete!" << std::endl;
-		}
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		std::cerr << "Error: Framebuffer is not complete!" << std::endl;
 	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Initialize()
 {
-	InputManager::GetInstance().Initialize();
-
 	usingAffineTextureMapping = true;
 	usingInterlacedResolution = false;
-	showingAllTextures		  = true;
+	showingAllTextures		  = false;
+	interlaced				  = false;
 
 	rotation_duration = 5.0f;
 
@@ -434,15 +518,10 @@ void Initialize()
 	// polygon mode: fill the triangles by default
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-	objects.push_back(Object {});
+	objects.push_back(GameObjectManager::GetInstance().NewGameObject("bichisua"));
 
-	camera.m_viewMatrix
-		= glm::lookAt(glm::vec3 { 0.0f, 75.0f, 125.0f }, glm::vec3 { 0.0f, 0.0f, 0.0f }, glm::vec3 { 0.0f, 1.0f, 0.0f });
-	camera.m_projectionMatrix
-		= glm::perspective(glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 1000.0f);
-
-	Resource<Model>	  model { "data/meshes/maxwell.obj" };
-	Resource<Texture> texture { "data/images/maxwell.jpg" };
+	Resource<Model>	  model { "data/meshes/pish.obj" };
+	Resource<Texture> texture { "data/images/pish.png" };
 	//Resource<Model>	  model { Model::CUBE_PRIMITIVE };
 	//Resource<Texture> texture { "data/colortest.png" };
 
@@ -451,41 +530,32 @@ void Initialize()
 
 	quad = Resource<Model> { Model::QUAD_PRIMITIVE };
 
-	for (Object& obj : objects)
+	for (GameObject* obj : objects)
 	{
-		obj.model	= model;
-		obj.texture = texture;
+		TransformationComponent* transform = obj->AddComponent<TransformationComponent>();
+		transform->SetWorldScale(glm::vec3 { 5.0f });
 
-		//obj.m_scale = glm::vec3 { 0.2f };
-		obj.m_scale = glm::vec3 { 100.0f };
+		MagicComponent* logic = obj->AddComponent<MagicComponent>();
+		logic->model		  = model;
+		logic->texture		  = texture;
+
+		obj->Initialize();
 	}
+
+	camera								   = GameObjectManager::GetInstance().NewGameObject("camera");
+	TransformationComponent* cam_transform = camera->AddComponent<TransformationComponent>();
+	cam_transform->SetWorldPosition(glm::vec3 { 0.0f, 75.0f, 125.0f });
+	cam_transform->LookAt(glm::vec3 { 0.0f });
+
+	DummyCamera* cam = camera->AddComponent<DummyCamera>();
+
+	camera->Initialize();
 
 	GenerateGBuffers();
 }
 
 void Update(float delta)
 {
-	// rotate all objects around the vertical axis at a rate of 360 degrees per 5 seconds
-	for (Object& object : objects)
-	{
-		object.m_rotation.y += -glm::radians(360.0f / rotation_duration) * delta;
-
-		// also rotate slightly around the right axis, but slower
-		//object.m_rotation.x += glm::radians(360.0f / 20.0f) * delta;
-	}
-
-	if (InputManager::GetInstance().Triggered(Keyboard::A))
-	{
-		std::cout << "TRIGGERED";
-	}
-	if (InputManager::GetInstance().Pressed(Keyboard::S))
-	{
-		std::cout << "PRESSED";
-	}
-	if (InputManager::GetInstance().Released(Keyboard::D))
-	{
-		std::cout << "RELEASED";
-	}
 }
 
 void RenderGUI()
@@ -495,12 +565,27 @@ void RenderGUI()
 		ImGui::Checkbox("Affine texture mapping", &usingAffineTextureMapping);
 
 		ImGui::DragFloat("Rotation duration", &rotation_duration);
+
+		ImGui::Checkbox("Interlaced", &interlaced);
+
+		ImGui::DragFloat("Speed", &camera->GetComponent<DummyCamera>()->speed);
 	}
 	ImGui::End();
 }
 
 void Render()
 {
+	static int current_field = 0;
+
+	if (interlaced == false)
+	{
+		current_field = 0;
+	}
+	else
+	{
+		current_field ^= 1;
+	}
+
 	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "Geometry pass");
 
 	geometry_shader->Bind();
@@ -508,12 +593,11 @@ void Render()
 	glUniform1i(3, static_cast<int>(usingAffineTextureMapping));
 
 	// bind non-default framebuffer
-	constexpr int mode = 0;
-	glBindFramebuffer(GL_FRAMEBUFFER, GBuffer[mode]);
+	glBindFramebuffer(GL_FRAMEBUFFER, GBuffer);
 
 	// clear
-	glViewport(0, 0, framebufferResolution[mode].x, framebufferResolution[mode].y);
-	glScissor(0, 0, framebufferResolution[mode].x, framebufferResolution[mode].y);
+	glViewport(0, 0, framebufferResolution.x, framebufferResolution.y);
+	glScissor(0, 0, framebufferResolution.x, framebufferResolution.y);
 
 	// position
 	glm::vec4 position_clear { glm::vec3 { std::numeric_limits<float>::max() }, 0 };
@@ -524,18 +608,22 @@ void Render()
 	glClearBufferfv(GL_COLOR, 1, &normal_clear[0]);
 
 	// albedo
-	glm::vec4 color_clear { glm::vec3 { 0.7f } , 1.0f};
+	glm::vec4 color_clear { glm::vec3 { 0.7f }, 1.0f };
 	glClearBufferfv(GL_COLOR, 2, &color_clear[0]);
 
 	// depth
 	glClear(GL_DEPTH_BUFFER_BIT);
 
-	// render objects
-	glUniformMatrix4fv(0, 1, GL_FALSE, &camera.m_projectionMatrix[0][0]);
-	glUniformMatrix4fv(1, 1, GL_FALSE, &camera.m_viewMatrix[0][0]);
+	DummyCamera* cam = camera->GetComponent<DummyCamera>();
 
-	for (const Object& object : objects)
-		object.Render();
+	// render objects
+	glUniformMatrix4fv(0, 1, GL_FALSE, &cam->GetProjectionMatrix()[0][0]);
+	glUniformMatrix4fv(1, 1, GL_FALSE, &cam->GetViewMatrix()[0][0]);
+
+	for (GameObject* object : objects)
+	{
+		object->GetComponent<MagicComponent>()->Render();
+	}
 
 	glPopDebugGroup();
 
@@ -554,13 +642,13 @@ void Render()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	int scale_factor = 1;
-	while (framebufferResolution[mode].x * (scale_factor + 1) <= window_size.x
-		   && framebufferResolution[mode].y * (scale_factor + 1) <= window_size.y)
+	while (framebufferResolution.x * (scale_factor + 1) <= window_size.x
+		   && framebufferResolution.y * (scale_factor + 1) <= window_size.y)
 	{
 		scale_factor++;
 	}
 
-	glm::ivec2 uniform_scaled_size = scale_factor * framebufferResolution[mode];
+	glm::ivec2 uniform_scaled_size = scale_factor * framebufferResolution;
 
 	glViewport(
 		(window_size.x - uniform_scaled_size.x) / 2,
@@ -578,6 +666,8 @@ void Render()
 	// bind textures
 	glActiveTexture(GL_TEXTURE0);
 
+	glUniform1i(4, current_field);
+
 	glm::mat4 quad_model_matrix;
 	if (showingAllTextures)
 	{
@@ -587,7 +677,7 @@ void Render()
 		// near and far
 		glUniform2f(3, 0.1f, 100.0f);
 
-		GLuint	  attachments[]	  = { gPosition[mode], gNormal[mode], gAlbedo[mode], gDepth[mode] };
+		GLuint	  attachments[]	  = { gPosition, gNormal, gAlbedo, gDepth };
 		glm::vec2 displacements[] = {
 			{ -0.5f, -0.5f },
 			  { 0.5f,  0.5f  },
@@ -613,7 +703,7 @@ void Render()
 		glUniform1f(1, 2.0f);
 
 		// using the color texture
-		glBindTexture(GL_TEXTURE_2D, gAlbedo[mode]);
+		glBindTexture(GL_TEXTURE_2D, gAlbedo);
 		glUniform1i(2, 2);
 
 		// identity matrix (in addition to the 2x scale)
@@ -634,6 +724,4 @@ void Render()
 
 void Shutdown()
 {
-	InputManager::GetInstance().Shutdown();
-	ResourceManager::GetInstance().DeleteResources();
 }

@@ -4,7 +4,16 @@ cmake_minimum_required(VERSION 3.20)
 cmake_policy(SET CMP0120 NEW)
 
 set(SOURCE_FILES
-    "KeyCodes.hpp"
+    "LogicComponent.cpp"    "LogicComponent.hpp"
+"LogicSystem.cpp"    "LogicSystem.hpp"
+"HierarchyManager.cpp"    "HierarchyManager.hpp"
+"Rotation.cpp"    "Rotation.hpp"
+"GameObjectManager.cpp"    "GameObjectManager.hpp"
+"TransformationComponent.cpp"    "TransformationComponent.hpp"
+"Transformation.cpp"    "Transformation.hpp"
+"Component.hpp"    "Component.cpp"
+"GameObject.hpp"    "GameObject.cpp"    "GameObject.inl"
+"KeyCodes.hpp"
 "InputManager.cpp"    "InputManager.hpp"
 "JSONUtils.cpp"    "JSONUtils.hpp"
 "Vertex.hpp"

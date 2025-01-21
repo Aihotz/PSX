@@ -48,3 +48,16 @@ UI elements low-res, pixelated, often pre-rendered as sprites
 fonts were bitmap-based and aliased
 usually fixed cameras or primitive follow-cams
 trees with two crossing planes for instance
+
+engine#####
+camera component
+graphics system
+serializable
+event system
+memory manager
+time manager
+gomanager have list of objects to initialize?
+factory?
+state machine
+level manager
+window manager

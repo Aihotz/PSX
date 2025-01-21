@@ -10,10 +10,13 @@ in vec2 fragment_textureCoordinates;
 layout(binding = 0) uniform sampler2D textureData;
 layout(location = 2) uniform int current_texture; // 0 position, 1 normal, 2 albedo, 3 depth
 layout(location = 3) uniform vec2 frustum_distances;
+layout(location = 4) uniform int current_field;
 
 void main()
 {
 	vec4 texture_sample = texture(textureData, fragment_textureCoordinates);
+
+	int field_y = int(floor(fragment_textureCoordinates.y * textureSize(textureData, 0).y));
 
 	switch(current_texture)
 	{
@@ -40,4 +43,6 @@ void main()
 			output_color = texture_sample;
 			break;
 	}
+	
+	output_color *= (field_y + current_field) % 2;
 }
