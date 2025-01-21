@@ -1,6 +1,6 @@
 #include "HierarchyManager.hpp"
 #include "TransformationComponent.hpp"
-#include "GameObject.hpp"
+#include <GameObject/GameObject.hpp>
 #include <vector>
 
 void HierarchyManager::Shutdown()

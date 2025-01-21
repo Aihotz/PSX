@@ -1,7 +1,7 @@
 #ifndef TRANSFORMATIONCOMPONENT_HPP
 #define TRANSFORMATIONCOMPONENT_HPP
 
-#include "Component.hpp"
+#include <Components/Component.hpp>
 #include "Transformation.hpp"
 #include <glm/glm.hpp>
 
@@ -38,6 +38,9 @@ class TransformationComponent : public Component
 		void SetWorldPosition(glm::vec3 position);
 		void SetWorldScale(glm::vec3 scale);
 
+		void SetLocalTransformation(const Transformation& transformation);
+		void SetWorldTransformation(const Transformation& transformation);
+
 		glm::vec3 GetLocalPosition() const;
 		glm::vec3 GetLocalScale() const;
 		Rotation  GetLocalRotation() const;
@@ -49,6 +52,8 @@ class TransformationComponent : public Component
 		const Transformation& GetLocalTransformation() const;
 		const glm::mat4&	  GetWorldMatrix() const;
 		const Transformation& GetWorldTransformation() const;
+
+		virtual void Edit() override;
 };
 
 #endif

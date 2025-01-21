@@ -17,11 +17,11 @@
 #include <backends/imgui_impl_sdl3.h>
 
 // NEW INCLUDES
-#include "LogicSystem.hpp"
-#include "GameObjectManager.hpp"
-#include "HierarchyManager.hpp"
-#include "InputManager.hpp"
-#include "ResourceManager.hpp"
+#include "Components/LogicSystem.hpp"
+#include "GameObject/GameObjectManager.hpp"
+#include "Transformation/HierarchyManager.hpp"
+#include "Input/InputManager.hpp"
+#include "Resources/ResourceManager.hpp"
 
 #include <stb_image.h>
 #include <glm/glm.hpp>
@@ -30,19 +30,21 @@
 #include <iostream>
 #include <chrono>
 
-#include "Model.hpp"
-#include "ShaderProgram.hpp"
-#include "Texture.hpp"
+#include "Resources/Model.hpp"
+#include "Resources/ShaderProgram.hpp"
+#include "Resources/Texture.hpp"
 
-#include "GameObject.hpp"
-#include "LogicComponent.hpp"
-#include "TransformationComponent.hpp"
-#include "Transformation.hpp"
+#include "GameObject/GameObject.hpp"
+#include "Components/LogicComponent.hpp"
+#include "Transformation/TransformationComponent.hpp"
+#include "Transformation/Transformation.hpp"
+
+#include <ImGuizmo.h>
 
 namespace
 {
-	static constexpr int WINDOW_WIDTH  = 1920;
-	static constexpr int WINDOW_HEIGHT = 1080;
+	static constexpr int WINDOW_WIDTH  = 1280;
+	static constexpr int WINDOW_HEIGHT = 720;
 } //namespace
 
 void DebugCallback(
@@ -156,6 +158,7 @@ int main(int, char**)
 	(void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 	ImGui::StyleColorsDark();
 
@@ -267,6 +270,9 @@ namespace
 	bool usingAffineTextureMapping;
 	bool showingAllTextures;
 
+	glm::ivec2 game_window_size { WINDOW_WIDTH, WINDOW_HEIGHT };
+	GLuint	   screen_buffer, screen_buffer_color;
+
 	// progressive: 320x240
 	// interlaced:  640x480
 	bool				 usingInterlacedResolution;
@@ -293,17 +299,51 @@ class DummyCamera : public LogicComponent
 		glm::mat4 m_projectionMatrix;
 		glm::mat4 m_viewMatrix;
 
+		void ComputeProjectionMatrix()
+		{
+			m_projectionMatrix = glm::perspective(glm::radians(fovy), aspect_ratio, near, far);
+		}
+
 	public:
 		float speed;
+		float fovy;
+		float aspect_ratio;
+		float near;
+		float far;
+
+		DummyCamera()
+			: transform { nullptr }
+			, m_projectionMatrix { glm::identity<glm::mat4>() }
+			, m_viewMatrix { glm::identity<glm::mat4>() }
+			, speed { 1.0f }
+			, fovy { 45.0f }
+			, aspect_ratio { static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT }
+			, near { 0.1f }
+			, far { 1000.0f }
+		{
+		}
 
 		virtual void Initialize() override
 		{
 			transform = GetComponent<TransformationComponent>();
 
-			m_projectionMatrix = glm::perspective(
-				glm::radians(45.0f), static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 1000.0f);
+			ComputeProjectionMatrix();
+		}
 
-			speed = 1.0f;
+		virtual void Edit() override
+		{
+			bool changed = false;
+			
+			changed |= ImGui::DragFloat("Speed", &speed);
+			changed |= ImGui::DragFloat("Aspect ratio", &aspect_ratio, 0.05f);
+			changed |= ImGui::DragFloat("Field of View", &fovy);
+			changed |= ImGui::DragFloat("Near", &near);
+			changed |= ImGui::DragFloat("Far", &far);
+
+			if (changed)
+			{
+				ComputeProjectionMatrix();
+			}
 		}
 
 		virtual void Update() override
@@ -366,6 +406,11 @@ class MagicComponent : public LogicComponent
 	public:
 		Resource<Model>	  model;
 		Resource<Texture> texture;
+
+		MagicComponent()
+			: transform { nullptr }
+		{
+		}
 
 		virtual void Initialize() override
 		{
@@ -548,32 +593,42 @@ void Initialize()
 	cam_transform->LookAt(glm::vec3 { 0.0f });
 
 	DummyCamera* cam = camera->AddComponent<DummyCamera>();
+	cam->aspect_ratio = static_cast<float>(framebufferResolution.x) / framebufferResolution.y;
 
 	camera->Initialize();
 
 	GenerateGBuffers();
+
+	// SCREEN BUFFER FOR IMGUI
+	glGenFramebuffers(1, &screen_buffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, screen_buffer);
+
+	// albedo attachment
+	glGenTextures(1, &screen_buffer_color);
+	glBindTexture(GL_TEXTURE_2D, screen_buffer_color);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, screen_buffer_color, 0);
+
+	GLenum attachments[] = { GL_COLOR_ATTACHMENT0 };
+	glDrawBuffers(sizeof(attachments) / sizeof(attachments[0]), attachments);
+
+	// check for completeness
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		std::cerr << "Error: Framebuffer is not complete!" << std::endl;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Update(float delta)
 {
 }
 
-void RenderGUI()
-{
-	if (ImGui::Begin("Features"))
-	{
-		ImGui::Checkbox("Affine texture mapping", &usingAffineTextureMapping);
-
-		ImGui::DragFloat("Rotation duration", &rotation_duration);
-
-		ImGui::Checkbox("Interlaced", &interlaced);
-
-		ImGui::DragFloat("Speed", &camera->GetComponent<DummyCamera>()->speed);
-	}
-	ImGui::End();
-}
-
-void Render()
+void RenderScene()
 {
 	static int current_field = 0;
 
@@ -631,19 +686,18 @@ void Render()
 
 	screen_shader->Bind();
 
-	// render regular framebuffer (screen)
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	// render regular framebuffer (fake screen)
+	glBindFramebuffer(GL_FRAMEBUFFER, screen_buffer);
 
 	// clear
-	static constexpr glm::ivec2 window_size = glm::ivec2 { WINDOW_WIDTH, WINDOW_HEIGHT };
-	glViewport(0, 0, window_size.x, window_size.y);
-	glScissor(0, 0, window_size.x, window_size.y);
+	glViewport(0, 0, game_window_size.x, game_window_size.y);
+	glScissor(0, 0, game_window_size.x, game_window_size.y);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	int scale_factor = 1;
-	while (framebufferResolution.x * (scale_factor + 1) <= window_size.x
-		   && framebufferResolution.y * (scale_factor + 1) <= window_size.y)
+	while (framebufferResolution.x * (scale_factor + 1) <= game_window_size.x
+		   && framebufferResolution.y * (scale_factor + 1) <= game_window_size.y)
 	{
 		scale_factor++;
 	}
@@ -651,13 +705,13 @@ void Render()
 	glm::ivec2 uniform_scaled_size = scale_factor * framebufferResolution;
 
 	glViewport(
-		(window_size.x - uniform_scaled_size.x) / 2,
-		(window_size.y - uniform_scaled_size.y) / 2,
+		(game_window_size.x - uniform_scaled_size.x) / 2,
+		(game_window_size.y - uniform_scaled_size.y) / 2,
 		uniform_scaled_size.x,
 		uniform_scaled_size.y);
 	glScissor(
-		(window_size.x - uniform_scaled_size.x) / 2,
-		(window_size.y - uniform_scaled_size.y) / 2,
+		(game_window_size.x - uniform_scaled_size.x) / 2,
+		(game_window_size.y - uniform_scaled_size.y) / 2,
 		uniform_scaled_size.x,
 		uniform_scaled_size.y);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -719,7 +773,67 @@ void Render()
 
 	glPopDebugGroup();
 
-	RenderGUI();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	// clear screen
+	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+	glScissor(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void Render()
+{
+	ImGui::DockSpaceOverViewport();
+
+	if (ImGui::Begin("Game"))
+	{
+		ImVec2	   available_size = ImGui::GetContentRegionAvail();
+		glm::ivec2 render_size	  = glm::ivec2(available_size.x, available_size.y);
+		if (render_size != game_window_size && render_size.x > 0 && render_size.y > 0)
+		{
+			glBindTexture(GL_TEXTURE_2D, screen_buffer_color);
+			glTexImage2D(
+				GL_TEXTURE_2D, 0, GL_RGBA, render_size.x, render_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		}
+
+		game_window_size = render_size;
+
+		if (game_window_size.x > 0 && game_window_size.y > 0)
+		{
+			RenderScene();
+			ImGui::Image(
+				screen_buffer_color,
+				ImVec2(game_window_size.x, game_window_size.y),
+				ImVec2(0.0f, 1.0f),
+				ImVec2(1.0f, 0.0f));
+		}
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("Editor"))
+	{
+		GameObject::Edit();
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("Features"))
+	{
+		ImGui::Checkbox("Affine texture mapping", &usingAffineTextureMapping);
+
+		ImGui::DragFloat("Rotation duration", &rotation_duration);
+
+		ImGui::Checkbox("Interlaced", &interlaced);
+
+		ImGui::DragFloat("Speed", &camera->GetComponent<DummyCamera>()->speed);
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("GameObject Manager"))
+	{
+		GameObjectManager::GetInstance().Display();
+	}
+	ImGui::End();
 }
 
 void Shutdown()

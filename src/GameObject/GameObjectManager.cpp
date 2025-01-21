@@ -19,7 +19,6 @@ void GameObjectManager::RemoveRootGameObject(GameObject* object)
 		return;
 	}
 
-
 	mAllRootObjects.remove(object);
 }
 
@@ -144,4 +143,69 @@ std::vector<GameObject*> GameObjectManager::FindAllObjectsWithName(const std::st
 	}
 
 	return all_objects;
+}
+
+#include <imgui.h>
+
+namespace
+{
+	int selected_object = -1;
+}
+
+void DisplayHierarchyRecursive(GameObject* object, int& id)
+{
+	if (object == nullptr)
+	{
+		return;
+	}
+
+	ImGui::PushID(id);
+
+	const std::vector<GameObject*>& children = object->GetChildren();
+
+	ImGuiTreeNodeFlags node_flags = ImGuiTreeNodeFlags_OpenOnArrow;
+
+	if (selected_object == id)
+	{
+		node_flags |= ImGuiTreeNodeFlags_Selected;
+		GameObject::SetEditTarget(object);
+	}
+
+	if (children.empty())
+	{
+		node_flags |= ImGuiTreeNodeFlags_Leaf;
+	}
+
+	if (ImGui::TreeNodeEx(object->GetName().c_str(), node_flags))
+	{
+		if (ImGui::IsItemClicked())
+		{
+			selected_object = id;
+		}
+
+		id++;
+
+		for (GameObject* child : children)
+		{
+			DisplayHierarchyRecursive(child, id);
+		}
+
+		ImGui::TreePop();
+	}
+
+	ImGui::PopID();
+}
+
+void GameObjectManager::Display()
+{
+	if (ImGui::TreeNodeEx("Scene root", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		int id = 0;
+		for (GameObject* object : mAllRootObjects)
+		{
+			DisplayHierarchyRecursive(object, id);
+		}
+
+		ImGui::TreePop();
+	}
 }

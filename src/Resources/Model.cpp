@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <iostream>
 
-#include <Vertex.hpp>
+#include "Vertex.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>

@@ -1,7 +1,7 @@
 #ifndef HIERARCHYMANAGER_HPP
 #define HIERARCHYMANAGER_HPP
 
-#include "Singleton.hpp"
+#include <Utils/Singleton.hpp>
 #include <list>
 
 class TransformationComponent;

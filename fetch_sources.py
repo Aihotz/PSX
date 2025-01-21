@@ -23,9 +23,10 @@ def execute(args):
 		raise Exception("Failed to execute '%s', got %d" % (str(args), retcode))
 
 class GitSource:
-	def __init__(self, httpsUrl: str, baseDirectory: str):
+	def __init__(self, httpsUrl: str, baseDirectory: str, branch: str = None):
 		self.httpsUrl = httpsUrl
 		self.baseDirectory = baseDirectory
+		self.branch = branch
 
 	def fetch(self, force: bool):
 		sourceDirectory = os.path.join(EXTERNAL_DIR, self.baseDirectory)
@@ -39,14 +40,17 @@ class GitSource:
 		try:
 			force_arg = ['--force'] if force else []
 			execute(["git", "fetch"] + force_arg + ["--tags", self.httpsUrl, "+refs/heads/*:refs/remotes/origin/*"])
-            
-            # checkout latests commit from default branch
-			execute(["git", "checkout"] + force_arg + ["origin/HEAD"])
+
+			if self.branch:
+				execute(["git", "checkout"] + force_arg + [f"origin/{self.branch}"])
+			else:
+				execute(["git", "checkout"] + force_arg + ["origin/HEAD"])
 		finally:
 			popd()
 
 SOURCES = [
-	GitSource("https://github.com/ocornut/imgui.git",               "imgui"),
+	GitSource("https://github.com/ocornut/imgui.git",               "imgui", "docking"),
+	GitSource("https://github.com/CedricGuillemet/ImGuizmo.git",    "imguizmo"),
 	GitSource("https://github.com/libsdl-org/SDL.git",              "SDL"),
 	GitSource("https://github.com/nlohmann/json.git",               "JSON"),
 	GitSource("https://github.com/g-truc/glm.git",                  "glm"),

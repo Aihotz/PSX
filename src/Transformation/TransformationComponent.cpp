@@ -1,5 +1,5 @@
 #include "TransformationComponent.hpp"
-#include "GameObject.hpp"
+#include <GameObject/GameObject.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "HierarchyManager.hpp"
 
@@ -130,7 +130,7 @@ void TransformationComponent::SetWorldRotation(glm::vec3 forward, glm::vec3 up, 
 void TransformationComponent::SetWorldPosition(glm::vec3 position)
 {
 	if (mParent == nullptr)
-	{	
+	{
 		SetLocalPosition(position);
 	}
 	else
@@ -154,6 +154,24 @@ void TransformationComponent::SetWorldScale(glm::vec3 scale)
 		temp.scale = scale;
 
 		SetLocalScale(mParent->GetWorldTransformation().InverseConcatenate(temp).scale);
+	}
+}
+
+void TransformationComponent::SetLocalTransformation(const Transformation& transformation)
+{
+	mLocalTransformation = transformation;
+	Update();
+}
+
+void TransformationComponent::SetWorldTransformation(const Transformation& transformation)
+{
+	if (mParent == nullptr)
+	{
+		SetLocalTransformation(transformation);
+	}
+	else
+	{
+		SetLocalTransformation(mParent->GetWorldTransformation().InverseConcatenate(transformation));
 	}
 }
 
@@ -200,4 +218,32 @@ const glm::mat4& TransformationComponent::GetWorldMatrix() const
 const Transformation& TransformationComponent::GetWorldTransformation() const
 {
 	return mWorldTransformation;
+}
+
+#include <imgui.h>
+
+void TransformationComponent::Edit()
+{
+	static bool world = true;
+
+	ImGui::Checkbox("World", &world);
+
+	Transformation tempTransformation = world ? mWorldTransformation : mLocalTransformation;
+
+	bool changed  = false;
+	changed		 |= ImGui::DragFloat3("Position", &tempTransformation.position[0]);
+	changed		 |= ImGui::DragFloat3("Scale", &tempTransformation.scale[0]);
+	//changed |= ImGui::DragFloat3("Rotation", &mWorldTransformation.position[0]);
+
+	if (changed)
+	{
+		if (world)
+		{
+			SetWorldTransformation(tempTransformation);
+		}
+		else
+		{
+			SetLocalTransformation(tempTransformation);
+		}
+	}
 }

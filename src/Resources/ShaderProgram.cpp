@@ -4,7 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include "JSONUtils.hpp"
+#include <Utils/JSONUtils.hpp>
 #include "ResourceManager.hpp"
 
 using namespace gl;

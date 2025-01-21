@@ -1,5 +1,5 @@
 #include "Component.hpp"
-#include "GameObject.hpp"
+#include <GameObject/GameObject.hpp>
 
 template <typename T>
 T* Component::GetComponent() const

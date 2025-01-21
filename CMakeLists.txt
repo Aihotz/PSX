@@ -22,6 +22,7 @@ add_subdirectory(external/FreeType EXCLUDE_FROM_ALL)
 # Include directories
 include_directories(src)
 include_directories(external/imgui)
+include_directories(external/imguizmo)
 include_directories(external/glm)
 include_directories(external/stb)
 include_directories(external/tinyobj)
@@ -34,6 +35,7 @@ set(IMGUI_SOURCE_FILES
     external/imgui/backends/imgui_impl_sdl3.cpp
     external/imgui/backends/imgui_impl_opengl3.cpp
     external/imgui/imgui_demo.cpp
+	external/imgui/misc/cpp/imgui_stdlib.cpp
 )
 
 add_library(imguiLib STATIC ${IMGUI_SOURCE_FILES})

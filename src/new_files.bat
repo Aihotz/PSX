@@ -31,17 +31,6 @@ if "%~1"=="" (
 	)
 )
 
-:: path to CMakeLists.txt
-set "cmakelists=CMakeLists.txt"
-
-:: verify CMakeLists.txt exists
-if not exist "%cmakelists%" (
-    echo Error: CMakeLists.txt not found in the current directory.
-    exit /b 1
-)
-
-:: create files and update CMakeLists.txt
-set "new_files="
 for %%E in (!args!) do (
     set "file=%name%.%%E"
 	
@@ -82,47 +71,9 @@ for %%E in (!args!) do (
 				echo.
 			) > "!file!"
 		)
-
-		set "new_files=!new_files!    ^"%name%.%%E^""$LF$
 	)
-)
-
-if "!new_files!"=="" (
-	echo Nothing to update!
-	exit /b 1
 )
 
 echo Updating CMakeLists.txt
-
-:: update the SOURCE_FILES in CMakeLists.txt
-set "printed="
-(for /f "delims=" %%L in ('findstr /N "^" "%cmakelists%"') do (
-	set "line=%%L"
-	set "line=!line:*:=!"
-	
-		
-	if "!line!"=="" (
-		echo.
-	) else (
-	
-		if "!printed!"=="" (
-			set "printed=Y"
-		) else (
-			echo.
-		)
-	
-		echo !line! | findstr /c:"set(SOURCE_FILES" >nul && (
-			<nul set /p="!line!"
-			echo.
-			echo !new_files!
-			set "printed="
-		) || (
-			<nul set /p="!line!"
-		)
-	)
-)) > "%cmakelists%.temp"
-
-move /y "%cmakelists%.temp" "%cmakelists%" >nul
-echo Updated %cmakelists% with new source files.
 
 echo Script completed successfully!

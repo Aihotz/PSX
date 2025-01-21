@@ -1,7 +1,7 @@
 #include "GameObject.hpp"
 #include "GameObjectManager.hpp"
-#include "Component.hpp"
-#include "TransformationComponent.hpp"
+#include <Components/Component.hpp>
+#include <Transformation/TransformationComponent.hpp>
 
 GameObject::GameObject(const std::string& name)
 	: mName { name }, mParent { nullptr }
@@ -225,4 +225,39 @@ GameObject* GameObject::GetChild(size_t index) const
 	}
 
 	return nullptr;
+}
+
+void GameObject::SetEditTarget(GameObject* object)
+{
+	edit_target = object;
+}
+
+#include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
+
+void GameObject::Edit()
+{
+	if (edit_target == nullptr)
+	{
+		return;
+	}
+
+	ImGui::InputText("Name", &edit_target->mName);
+
+	int id = 0;
+	for (Component* component : edit_target->mComponents)
+	{
+		ImGui::PushID(id++);
+
+		ImGui::Separator();
+		std::string component_name = typeid(*component).name();
+		if (ImGui::TreeNodeEx(
+				component_name.substr(component_name.find_last_of(' ') + 1).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			component->Edit();
+			ImGui::TreePop();
+		}
+
+		ImGui::PopID();
+	}
 }

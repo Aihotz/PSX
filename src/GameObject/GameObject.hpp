@@ -23,6 +23,8 @@ class GameObject
 		void InternalDestroy();
 		void DetachChild(GameObject* child);
 
+		static inline GameObject* edit_target = nullptr;
+
 	public:
 		static GameObject*				FindObjectByName(const std::string& name);
 		static std::vector<GameObject*> FindAllObjectsWithName(const std::string& name);
@@ -64,8 +66,11 @@ class GameObject
 		void RemoveAllComponents();
 
 		void RemoveComponent(Component* component);
+
+		static void SetEditTarget(GameObject* object);
+		static void Edit();
 };
 
-#include <GameObject.inl>
+#include "GameObject.inl"
 
 #endif

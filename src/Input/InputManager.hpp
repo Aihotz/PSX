@@ -1,7 +1,7 @@
 #ifndef INPUTMANAGER_HPP
 #define INPUTMANAGER_HPP
 
-#include "Singleton.hpp"
+#include <Utils/Singleton.hpp>
 #include <SDL3/SDL.h>
 #include <glm/glm.hpp>
 #include "KeyCodes.hpp"

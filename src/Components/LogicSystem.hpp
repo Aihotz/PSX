@@ -1,7 +1,7 @@
 #ifndef LOGICSYSTEM_HPP
 #define LOGICSYSTEM_HPP
 
-#include "Singleton.hpp"
+#include <Utils/Singleton.hpp>
 #include <list>
 
 class LogicComponent;

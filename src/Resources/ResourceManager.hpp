@@ -1,7 +1,7 @@
 #ifndef RESOURCE_MANAGER_HPP
 #define RESOURCE_MANAGER_HPP
 
-#include "Singleton.hpp"
+#include <Utils/Singleton.hpp>
 #include <memory>
 #include <string>
 #include <typeindex>

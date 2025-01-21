@@ -1,7 +1,7 @@
 #ifndef GAMEOBJECTMANAGER_HPP
 #define GAMEOBJECTMANAGER_HPP
 
-#include "Singleton.hpp"
+#include <Utils/Singleton.hpp>
 #include <string>
 #include <list>
 #include <vector>
@@ -27,6 +27,8 @@ class GameObjectManager : public Singleton<GameObjectManager>
 		GameObject* AddGameObject(GameObject* object);
 		GameObject* FindObjectByName(const std::string& name) const;
 		std::vector<GameObject*> FindAllObjectsWithName(const std::string& name) const;
+
+		void Display();
 };
 
 #endif
